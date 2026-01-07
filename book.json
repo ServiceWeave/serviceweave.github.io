@@ -1,0 +1,14 @@
+{
+  "title": "ServiceWeave Documentation",
+  "description": "Kubernetes Operator for agentic mesh management",
+  "author": "ServiceWeave Team",
+  "language": "en",
+  "gitbook": ">=3.0.0",
+  "root": ".",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [],
+  "pluginsConfig": {}
+}
