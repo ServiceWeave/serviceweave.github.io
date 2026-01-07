@@ -134,60 +134,23 @@ kubectl create secret generic azure-openai-credentials \
 
 ### 2. Deploy Vector Store
 
-If you don't have Qdrant deployed, you can use the following quick-start deployment:
-
-```yaml
-# qdrant.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: qdrant
-  namespace: serviceweave-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: qdrant
-  template:
-    metadata:
-      labels:
-        app: qdrant
-    spec:
-      containers:
-      - name: qdrant
-        image: qdrant/qdrant:latest
-        ports:
-        - containerPort: 6333
-        - containerPort: 6334
-        volumeMounts:
-        - name: storage
-          mountPath: /qdrant/storage
-      volumes:
-      - name: storage
-        emptyDir: {}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: qdrant
-  namespace: serviceweave-system
-spec:
-  selector:
-    app: qdrant
-  ports:
-  - name: http
-    port: 6333
-    targetPort: 6333
-  - name: grpc
-    port: 6334
-    targetPort: 6334
-```
-
-Apply it:
+If you don't have Qdrant deployed, use the provided example manifests:
 
 ```bash
-kubectl apply -f qdrant.yaml
+# Option 1: Using make (if you have the repo cloned)
+make deploy-qdrant
+
+# Option 2: Apply the manifest directly
+kubectl apply -f https://raw.githubusercontent.com/serviceweave/serviceweave/main/examples/qdrant/qdrant-standalone.yaml
 ```
+
+This deploys a single-node Qdrant instance with:
+- Persistent storage (10Gi PVC)
+- Security hardening (non-root, dropped capabilities)
+- Health probes configured
+- Service exposed on ports 6333 (HTTP) and 6334 (gRPC)
+
+For production, consider using the [Qdrant Helm chart](https://github.com/qdrant/qdrant-helm) or [Qdrant Cloud](https://cloud.qdrant.io/).
 
 ### 3. Configure TLS (Production)
 

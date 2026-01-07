@@ -4,58 +4,31 @@ ServiceWeave implements a Kubernetes-native architecture using the operator patt
 
 ## System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Kubernetes Cluster                                 │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                    serviceweave-system Namespace                        │ │
-│  │                                                                         │ │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
-│  │  │              ServiceWeave Controller Manager                     │   │ │
-│  │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │   │ │
-│  │  │  │  MeshConfig  │  │ServiceAgent  │  │    Pod Mutator       │  │   │ │
-│  │  │  │  Controller  │  │   Config     │  │ (Admission Webhook)  │  │   │ │
-│  │  │  │              │  │  Controller  │  │                      │  │   │ │
-│  │  │  └──────────────┘  └──────────────┘  └──────────────────────┘  │   │ │
-│  │  └─────────────────────────────────────────────────────────────────┘   │ │
-│  │                                                                         │ │
-│  │  ┌────────────────┐  ┌────────────────┐                                │ │
-│  │  │    Qdrant      │  │   Secrets      │                                │ │
-│  │  │ (Vector Store) │  │  (LLM Keys)    │                                │ │
-│  │  └────────────────┘  └────────────────┘                                │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                    Application Namespace                                │ │
-│  │                    (serviceweave.ai/inject: enabled)                    │ │
-│  │                                                                         │ │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
-│  │  │                        Application Pod                           │   │ │
-│  │  │  ┌─────────────────────┐    ┌─────────────────────────────────┐ │   │ │
-│  │  │  │   App Container     │    │   ServiceWeave Agent            │ │   │ │
-│  │  │  │   (Your Service)    │◄──►│   (Injected Sidecar)            │ │   │ │
-│  │  │  │                     │    │   - gRPC: 9090                  │ │   │ │
-│  │  │  │                     │    │   - Health: 9091                │ │   │ │
-│  │  │  └─────────────────────┘    └─────────────────────────────────┘ │   │ │
-│  │  │           ▲                              │                       │   │ │
-│  │  │           └──────────────────────────────┘                       │   │ │
-│  │  │                    Shared Volume                                 │   │ │
-│  │  │                 /var/run/serviceweave                            │   │ │
-│  │  └─────────────────────────────────────────────────────────────────┘   │ │
-│  │                                                                         │ │
-│  │  ┌────────────────────────┐                                            │ │
-│  │  │  ServiceAgentConfig    │                                            │ │
-│  │  │  (Per-Service Config)  │                                            │ │
-│  │  └────────────────────────┘                                            │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-                          ┌─────────────────────┐
-                          │    LLM Provider     │
-                          │   (OpenAI, etc.)    │
-                          └─────────────────────┘
+```mermaid
+flowchart TB
+    subgraph cluster["Kubernetes Cluster"]
+        subgraph sysns["serviceweave-system Namespace"]
+            subgraph ctrlmgr["ServiceWeave Controller Manager"]
+                mc["MeshConfig<br/>Controller"]
+                sac["ServiceAgent<br/>Config Controller"]
+                pm["Pod Mutator<br/>(Admission Webhook)"]
+            end
+            qdrant["Qdrant<br/>(Vector Store)"]
+            secrets["Secrets<br/>(LLM Keys)"]
+        end
+        subgraph appns["Application Namespace<br/>(serviceweave.ai/inject: enabled)"]
+            subgraph apppod["Application Pod"]
+                appcontainer["App Container<br/>(Your Service)"]
+                agent["ServiceWeave Agent<br/>(Injected Sidecar)<br/>- gRPC: 9090<br/>- Health: 9091"]
+                appcontainer <--> agent
+                volume[("Shared Volume<br/>/var/run/serviceweave")]
+                appcontainer --- volume
+                agent --- volume
+            end
+            sac_config["ServiceAgentConfig<br/>(Per-Service Config)"]
+        end
+    end
+    agent --> llm["LLM Provider<br/>(OpenAI, etc.)"]
 ```
 
 ## Core Components
@@ -91,83 +64,47 @@ The agent sidecar is automatically injected into pods in enabled namespaces. It:
 
 ### Request Processing Flow
 
-```
-1. Natural Language Request
-         │
-         ▼
-┌─────────────────────┐
-│  ServiceWeave Agent │
-│     (Sidecar)       │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Intent Detection  │◄──── LLM Provider
-│   (Semantic Search) │◄──── Vector Store
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Tool Selection    │
-│   (Schema Matching) │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Risk Assessment   │
-│   (Tier 0-3)        │
-└─────────────────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌───────┐  ┌────────┐
-│Execute│  │Escalate│
-│ (T0)  │  │(T1-T3) │
-└───────┘  └────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Application API    │
-│   (Your Service)    │
-└─────────────────────┘
+```mermaid
+flowchart TD
+    req["1. Natural Language Request"]
+    agent["ServiceWeave Agent<br/>(Sidecar)"]
+    intent["Intent Detection<br/>(Semantic Search)"]
+    llm["LLM Provider"]
+    vector["Vector Store"]
+    tool["Tool Selection<br/>(Schema Matching)"]
+    risk["Risk Assessment<br/>(Tier 0-3)"]
+    exec["Execute<br/>(T0)"]
+    escalate["Escalate<br/>(T1-T3)"]
+    api["Application API<br/>(Your Service)"]
+
+    req --> agent
+    agent --> intent
+    llm --> intent
+    vector --> intent
+    intent --> tool
+    tool --> risk
+    risk --> exec
+    risk --> escalate
+    exec --> api
+    escalate --> api
 ```
 
 ### Sidecar Injection Flow
 
-```
-1. Pod Creation Request
-         │
-         ▼
-┌─────────────────────┐
-│  Kubernetes API     │
-│  Server             │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Admission Webhook  │
-│  (Pod Mutator)      │
-└─────────────────────┘
-         │
-    Check:
-    - Namespace label?
-    - Pod annotation?
-    - Already injected?
-         │
-         ▼
-┌─────────────────────┐
-│  Inject Sidecar     │
-│  - Add container    │
-│  - Add volume       │
-│  - Add env vars     │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Mutated Pod        │
-│  Created            │
-└─────────────────────┘
+```mermaid
+flowchart TD
+    req["1. Pod Creation Request"]
+    api["Kubernetes API<br/>Server"]
+    webhook["Admission Webhook<br/>(Pod Mutator)"]
+    check{"Check:<br/>- Namespace label?<br/>- Pod annotation?<br/>- Already injected?"}
+    inject["Inject Sidecar<br/>- Add container<br/>- Add volume<br/>- Add env vars"]
+    created["Mutated Pod<br/>Created"]
+
+    req --> api
+    api --> webhook
+    webhook --> check
+    check --> inject
+    inject --> created
 ```
 
 ## Reconciliation Loops

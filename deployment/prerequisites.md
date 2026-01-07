@@ -72,12 +72,19 @@ ServiceWeave requires a vector database for semantic search.
 **Quick Qdrant Setup:**
 
 ```bash
-# Using Docker
+# Using Docker (local development)
 docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 
-# Using Kubernetes
-kubectl apply -f https://raw.githubusercontent.com/qdrant/qdrant-helm/main/examples/simple-deployment.yaml
+# Using Kubernetes (from ServiceWeave repo)
+git clone https://github.com/serviceweave/serviceweave.git
+cd serviceweave
+make deploy-qdrant
+
+# Or apply the manifest directly
+kubectl apply -f https://raw.githubusercontent.com/serviceweave/serviceweave/main/examples/qdrant/qdrant-standalone.yaml
 ```
+
+For production deployments, consider using the [Qdrant Helm chart](https://github.com/qdrant/qdrant-helm) or [Qdrant Cloud](https://cloud.qdrant.io/).
 
 ### Embedding Service
 

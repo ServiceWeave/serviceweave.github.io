@@ -32,22 +32,22 @@ Each pod in an enabled namespace receives a **Service Agent** sidecar. This agen
 - Caches API schemas and intent mappings
 - Handles risk assessment and approval workflows
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Application Pod                   │
-│  ┌─────────────────┐    ┌─────────────────────────┐ │
-│  │                 │    │    Service Agent        │ │
-│  │   Your App      │    │  ┌───────────────────┐  │ │
-│  │   Container     │◄──►│  │ Intent Detection  │  │ │
-│  │                 │    │  ├───────────────────┤  │ │
-│  │   REST API      │    │  │ Schema Cache      │  │ │
-│  │   GraphQL       │    │  ├───────────────────┤  │ │
-│  │   gRPC          │    │  │ Risk Assessment   │  │ │
-│  │                 │    │  ├───────────────────┤  │ │
-│  │                 │    │  │ API Orchestration │  │ │
-│  │                 │    │  └───────────────────┘  │ │
-│  └─────────────────┘    └─────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph pod["Application Pod"]
+        subgraph app["Your App Container"]
+            rest["REST API"]
+            graphql["GraphQL"]
+            grpc["gRPC"]
+        end
+        subgraph agent["Service Agent"]
+            intent["Intent Detection"]
+            cache["Schema Cache"]
+            risk["Risk Assessment"]
+            orch["API Orchestration"]
+        end
+        app <--> agent
+    end
 ```
 
 ### 2. Semantic Discovery
@@ -64,19 +64,13 @@ The discovered schemas are embedded into a vector store (Qdrant) for semantic se
 
 The Agentic Mesh maintains a mapping between user intents and API operations:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Intent-to-Tool Pipeline                        │
-│                                                                   │
-│  "Create an order for      ┌─────────────┐    POST /orders       │
-│   2 widgets"          ───► │   LLM +     │ ──► {                 │
-│                             │   Vector    │     "items": [       │
-│                             │   Search    │       {"name":       │
-│                             └─────────────┘        "widget",     │
-│                                                    "qty": 2}     │
-│                                                   ]              │
-│                                                  }               │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    input["&quot;Create an order for<br/>2 widgets&quot;"]
+    llm["LLM +<br/>Vector Search"]
+    output["POST /orders<br/>{&quot;items&quot;: [{&quot;name&quot;: &quot;widget&quot;, &quot;qty&quot;: 2}]}"]
+
+    input --> llm --> output
 ```
 
 ### 4. Risk Tiers
@@ -121,26 +115,19 @@ spec:
 
 The Agentic Mesh can orchestrate requests across multiple services:
 
-```
-User: "Show me orders for customer John that are pending"
-                    │
-                    ▼
-         ┌─────────────────┐
-         │  Agent Router   │
-         └─────────────────┘
-                    │
-         ┌──────────┼──────────┐
-         │          │          │
-         ▼          ▼          ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  Customer   │ │   Order     │ │  Aggregate  │
-│  Service    │ │  Service    │ │  & Return   │
-│             │ │             │ │             │
-│ GET /search │ │ GET /orders │ │  Results    │
-│  ?name=John │ │ ?customer=  │ │             │
-│             │ │  123&status │ │             │
-│             │ │  =pending   │ │             │
-└─────────────┘ └─────────────┘ └─────────────┘
+```mermaid
+flowchart TD
+    user["User: &quot;Show me orders for customer John that are pending&quot;"]
+    router["Agent Router"]
+    customer["Customer Service<br/>GET /search?name=John"]
+    order["Order Service<br/>GET /orders?customer=123&status=pending"]
+    aggregate["Aggregate & Return<br/>Results"]
+
+    user --> router
+    router --> customer
+    router --> order
+    customer --> aggregate
+    order --> aggregate
 ```
 
 ## Benefits

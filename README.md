@@ -24,26 +24,20 @@ ServiceWeave works similarly to how Istio injects Envoy proxies into your pods, 
 
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes Cluster                       │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │                 ServiceWeave Operator                │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │    │
-│  │  │ MeshConfig  │  │ServiceAgent │  │    Pod      │  │    │
-│  │  │ Controller  │  │  Config     │  │  Mutator    │  │    │
-│  │  │             │  │ Controller  │  │  (Webhook)  │  │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                              │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              Your Application Pod                    │    │
-│  │  ┌─────────────────┐    ┌─────────────────────────┐ │    │
-│  │  │   Your App      │◄──►│  ServiceWeave Agent     │ │    │
-│  │  │   Container     │    │  (Injected Sidecar)     │ │    │
-│  │  └─────────────────┘    └─────────────────────────┘ │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph cluster["Kubernetes Cluster"]
+        subgraph operator["ServiceWeave Operator"]
+            mc["MeshConfig<br/>Controller"]
+            sac["ServiceAgent<br/>Config Controller"]
+            pm["Pod Mutator<br/>(Webhook)"]
+        end
+        subgraph pod["Your Application Pod"]
+            app["Your App<br/>Container"]
+            agent["ServiceWeave Agent<br/>(Injected Sidecar)"]
+            app <--> agent
+        end
+    end
 ```
 
 1. **MeshConfig** defines global LLM, embedding, and vector store settings

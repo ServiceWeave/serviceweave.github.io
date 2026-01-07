@@ -6,80 +6,51 @@ ServiceWeave uses Kubernetes mutating admission webhooks to automatically inject
 
 ### Admission Webhook Flow
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        Pod Creation Request                               │
-│                                                                           │
-│  kubectl apply -f pod.yaml                                               │
-│         │                                                                 │
-│         ▼                                                                 │
-│  ┌─────────────────────┐                                                 │
-│  │  Kubernetes API     │                                                 │
-│  │  Server             │                                                 │
-│  └─────────────────────┘                                                 │
-│         │                                                                 │
-│         │ 1. AdmissionReview Request                                     │
-│         ▼                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │              ServiceWeave Pod Mutator Webhook                        │ │
-│  │                                                                      │ │
-│  │  ┌────────────────┐    ┌────────────────┐    ┌────────────────────┐ │ │
-│  │  │ 2. Check       │───►│ 3. Check       │───►│ 4. Inject          │ │ │
-│  │  │ Namespace      │    │ Pod            │    │ Sidecar            │ │ │
-│  │  │ Labels         │    │ Annotations    │    │                    │ │ │
-│  │  └────────────────┘    └────────────────┘    └────────────────────┘ │ │
-│  │         │                     │                      │              │ │
-│  │         ▼                     ▼                      ▼              │ │
-│  │  serviceweave.ai/     serviceweave.ai/       - Add container      │ │
-│  │  inject: enabled      inject: false?         - Add volume         │ │
-│  │  label present?       (skip if true)         - Add env vars       │ │
-│  │                                              - Add annotations    │ │
-│  └─────────────────────────────────────────────────────────────────────┘ │
-│         │                                                                 │
-│         │ 5. AdmissionReview Response (with patch)                       │
-│         ▼                                                                 │
-│  ┌─────────────────────┐                                                 │
-│  │  Pod Created with   │                                                 │
-│  │  Injected Sidecar   │                                                 │
-│  └─────────────────────┘                                                 │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    kubectl["kubectl apply -f pod.yaml"]
+    api["Kubernetes API<br/>Server"]
+
+    subgraph webhook["ServiceWeave Pod Mutator Webhook"]
+        check_ns["2. Check Namespace Labels<br/>serviceweave.ai/inject: enabled?"]
+        check_pod["3. Check Pod Annotations<br/>serviceweave.ai/inject: false?"]
+        inject["4. Inject Sidecar<br/>- Add container<br/>- Add volume<br/>- Add env vars<br/>- Add annotations"]
+        check_ns --> check_pod --> inject
+    end
+
+    created["Pod Created with<br/>Injected Sidecar"]
+
+    kubectl --> api
+    api -->|"1. AdmissionReview Request"| webhook
+    webhook -->|"5. AdmissionReview Response (with patch)"| created
 ```
 
 ### Injection Decision Logic
 
 The webhook follows this decision tree:
 
-```
-Pod Creation Request
-        │
-        ▼
-┌───────────────────────┐
-│ Already has           │     YES
-│ inject-status:        │──────────► Skip (already injected)
-│ injected annotation?  │
-└───────────────────────┘
-        │ NO
-        ▼
-┌───────────────────────┐
-│ Has annotation        │     YES
-│ serviceweave.ai/      │──────────► Skip (explicitly disabled)
-│ inject: false?        │
-└───────────────────────┘
-        │ NO
-        ▼
-┌───────────────────────┐
-│ MeshConfig exists?    │     NO
-│                       │──────────► Skip (no global config)
-└───────────────────────┘
-        │ YES
-        ▼
-┌───────────────────────┐
-│ Namespace matches     │     NO
-│ injection selector?   │──────────► Skip (namespace not enabled)
-└───────────────────────┘
-        │ YES
-        ▼
-    INJECT SIDECAR
+```mermaid
+flowchart TD
+    start["Pod Creation Request"]
+    check1{"Already has<br/>inject-status: injected<br/>annotation?"}
+    skip1["Skip (already injected)"]
+    check2{"Has annotation<br/>serviceweave.ai/inject: false?"}
+    skip2["Skip (explicitly disabled)"]
+    check3{"MeshConfig exists?"}
+    skip3["Skip (no global config)"]
+    check4{"Namespace matches<br/>injection selector?"}
+    skip4["Skip (namespace not enabled)"]
+    inject["INJECT SIDECAR"]
+
+    start --> check1
+    check1 -->|YES| skip1
+    check1 -->|NO| check2
+    check2 -->|YES| skip2
+    check2 -->|NO| check3
+    check3 -->|NO| skip3
+    check3 -->|YES| check4
+    check4 -->|NO| skip4
+    check4 -->|YES| inject
 ```
 
 ## Enabling Injection

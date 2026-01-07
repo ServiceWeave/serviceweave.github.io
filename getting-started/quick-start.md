@@ -7,9 +7,23 @@ This guide will help you get ServiceWeave running in your Kubernetes cluster in 
 - Kubernetes cluster (v1.26+)
 - `kubectl` configured to access your cluster
 - An OpenAI API key (or compatible LLM provider)
-- Helm 3.x (optional, for Helm-based installation)
 
-## Step 1: Install ServiceWeave Operator
+## Step 1: Install Prerequisites
+
+Install cert-manager (required for webhook certificates):
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=60s
+```
+
+Deploy Qdrant vector store:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/serviceweave/serviceweave/main/examples/qdrant/qdrant-standalone.yaml
+```
+
+## Step 2: Install ServiceWeave Operator
 
 Apply the ServiceWeave operator manifests:
 
@@ -29,7 +43,7 @@ NAME                                           READY   STATUS    RESTARTS   AGE
 serviceweave-controller-manager-xxxxx-xxxxx    1/1     Running   0          30s
 ```
 
-## Step 2: Create LLM Credentials Secret
+## Step 3: Create LLM Credentials Secret
 
 Create a secret containing your OpenAI API key:
 
@@ -39,7 +53,7 @@ kubectl create secret generic openai-credentials \
   --from-literal=api-key=sk-your-openai-api-key
 ```
 
-## Step 3: Deploy MeshConfig
+## Step 4: Deploy MeshConfig
 
 Create the global mesh configuration:
 
@@ -77,7 +91,7 @@ Apply it:
 kubectl apply -f meshconfig.yaml
 ```
 
-## Step 4: Enable Injection for a Namespace
+## Step 5: Enable Injection for a Namespace
 
 Label your application namespace to enable sidecar injection:
 
@@ -85,7 +99,7 @@ Label your application namespace to enable sidecar injection:
 kubectl label namespace default serviceweave.ai/inject=enabled
 ```
 
-## Step 5: Configure Your Service
+## Step 6: Configure Your Service
 
 Create a ServiceAgentConfig for your application:
 
@@ -112,7 +126,7 @@ Apply it:
 kubectl apply -f serviceagentconfig.yaml
 ```
 
-## Step 6: Deploy Your Application
+## Step 7: Deploy Your Application
 
 Deploy (or restart) your application. ServiceWeave will automatically inject the agent sidecar:
 
